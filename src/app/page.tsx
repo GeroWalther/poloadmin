@@ -9,12 +9,23 @@ export default function Home() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user) {
-        router.replace('/dashboard');
-      } else {
+      try {
+        if (!supabase) {
+          router.replace('/login');
+          return;
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          router.replace('/dashboard');
+        } else {
+          router.replace('/login');
+        }
+      } catch (error) {
+        console.error('Session check error:', error);
         router.replace('/login');
       }
     };

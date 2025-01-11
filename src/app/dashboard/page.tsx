@@ -141,7 +141,9 @@ export default function Dashboard() {
 
       <form onSubmit={handleUpload} className='mb-8 space-y-4 text-black'>
         <div>
-          <label htmlFor='title' className='block text-sm font-medium'>
+          <label
+            htmlFor='title'
+            className='block text-sm font-medium text-white'>
             Magazine Title
           </label>
           <input
@@ -154,7 +156,9 @@ export default function Dashboard() {
           />
         </div>
         <div>
-          <label htmlFor='description' className='block text-sm font-medium'>
+          <label
+            htmlFor='description'
+            className='block text-sm font-medium text-white'>
             Description
           </label>
           <textarea
@@ -167,7 +171,7 @@ export default function Dashboard() {
           />
         </div>
         <div>
-          <label htmlFor='pdf' className='block text-sm font-medium'>
+          <label htmlFor='pdf' className='block text-sm font-medium text-white'>
             PDF File
           </label>
           <input
@@ -176,7 +180,7 @@ export default function Dashboard() {
             accept='.pdf'
             required
             onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className='mt-1 block w-full'
+            className='mt-1 block w-full text-white'
           />
         </div>
         {error && (

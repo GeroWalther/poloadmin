@@ -14,25 +14,17 @@ export default function Login() {
   useEffect(() => {
     const checkUser = async () => {
       try {
+        if (!supabase) return;
+
         const {
           data: { session },
         } = await supabase.auth.getSession();
 
-        // Detailed session logging
-        console.log('🔍 Login Page Session Check:', {
-          hasSession: !!session,
-          hasUser: !!session?.user,
-          userId: session?.user?.id,
-          email: session?.user?.email,
-          accessToken: !!session?.access_token,
-        });
-
         if (session?.user) {
-          console.log('🔄 Session found, redirecting to dashboard');
           router.replace('/dashboard');
         }
       } catch (error) {
-        console.error('❌ Session check error:', error);
+        console.error('Session check error:', error);
       } finally {
         setLoading(false);
       }
@@ -51,26 +43,22 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
+
     setLoading(true);
     setError(null);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      console.log('Login attempt response:', { data, error });
 
       if (error) throw error;
 
-      // Check session immediately after login
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      console.log('Session after login attempt:', {
-        hasSession: !!session,
-        user: session?.user,
-      });
 
       if (session) {
         router.replace('/dashboard');

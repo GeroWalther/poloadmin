@@ -36,7 +36,7 @@ export default function Dashboard() {
 
     checkSession();
     fetchMagazines();
-  }, []);
+  }, [router]);
 
   const fetchMagazines = async () => {
     const { data, error } = await supabase

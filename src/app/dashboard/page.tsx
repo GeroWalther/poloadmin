@@ -23,11 +23,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
     const checkSession = async () => {
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
 
       if (!session) {
         router.replace('/login');
@@ -39,27 +38,28 @@ export default function Dashboard() {
   }, [router]);
 
   const fetchMagazines = async () => {
+    if (!supabase) return;
+
     const { data, error } = await supabase
       .from('magazines')
       .select('*')
       .order('created_at', { ascending: false });
-    console.log(data);
+
     if (error) {
       setError(error.message);
     } else {
-      setMagazines(data);
+      setMagazines(data || []);
     }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file || !supabase) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      // Upload PDF to Supabase Storage with a more unique filename
       const timestamp = new Date().getTime();
       const fileExt = file.name.split('.').pop();
       const fileName = `${timestamp}-${Math.random()}.${fileExt}`;
@@ -70,21 +70,18 @@ export default function Dashboard() {
 
       if (uploadError) throw uploadError;
 
-      // Get the public URL for the uploaded file
       const { data: publicUrlData } = supabase.storage
         .from('magazines')
         .getPublicUrl(fileName);
 
-      // Create magazine entry in the database with the public URL
       const { error: dbError } = await supabase.from('magazines').insert({
         title,
         description,
-        pdf: publicUrlData.publicUrl, // Store the full public URL
+        pdf: publicUrlData.publicUrl,
       });
 
       if (dbError) throw dbError;
 
-      // Reset form and refresh magazines
       setTitle('');
       setDescription('');
       setFile(null);
@@ -99,10 +96,10 @@ export default function Dashboard() {
   };
 
   const handleSignOut = async () => {
+    if (!supabase) return;
+
     try {
-      console.log('Signing out...');
       await supabase.auth.signOut();
-      console.log('Sign out successful');
       router.refresh();
       router.replace('/login');
     } catch (error) {
@@ -111,12 +108,11 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!supabase) return;
+
     try {
       const { error } = await supabase.from('magazines').delete().eq('id', id);
-
       if (error) throw error;
-
-      // Refresh the magazines list
       fetchMagazines();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {

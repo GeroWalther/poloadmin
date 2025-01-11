@@ -30,7 +30,7 @@ export default function RootLayout({
           <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
             <div className='h-16 flex items-center justify-center'>
               <h1 className='text-2xl font-bold text-black'>
-                Polo&Lyfestyle Magazine
+                Polo&Lifestyle Magazine
               </h1>
             </div>
           </div>

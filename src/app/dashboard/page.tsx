@@ -22,15 +22,12 @@ export default function Dashboard() {
   const router = useRouter();
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const checkSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      console.log('Dashboard - Session check:', {
-        hasSession: !!session,
-        user: session?.user,
-        path: 'dashboard',
-      });
 
       if (!session) {
         router.replace('/login');

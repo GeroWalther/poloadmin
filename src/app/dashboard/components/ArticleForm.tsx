@@ -72,9 +72,11 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
 
       resetForm();
       fetchArticles();
-    } catch (err: any) {
+    } catch (err: Error | unknown) {
       console.error('Upload error:', err);
-      setError(err.message);
+      setError(
+        err instanceof Error ? err.message : 'An unknown error occurred'
+      );
     } finally {
       setLoading(false);
     }
@@ -109,20 +111,28 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
   }, [titleImagePreview, imagesPreviews]);
 
   const uploadFile = async (file: File, bucket: string): Promise<string> => {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const timestamp = new Date().getTime();
     const fileName = `${timestamp}-${Math.random()}.${file.name
       .split('.')
       .pop()}`;
 
-    const result = await supabase?.storage.from(bucket).upload(fileName, file);
+    const uploadResult = await supabase.storage
+      .from(bucket)
+      .upload(fileName, file);
 
-    if (result?.error) throw result.error;
+    if (uploadResult.error) throw uploadResult.error;
 
-    const { data: publicUrlData } = supabase?.storage
+    const publicUrlResult = supabase.storage
       .from(bucket)
       .getPublicUrl(fileName);
-    console.log(publicUrlData.publicUrl);
-    return publicUrlData.publicUrl;
+
+    if (!publicUrlResult.data?.publicUrl) {
+      throw new Error('Failed to get public URL');
+    }
+
+    return publicUrlResult.data.publicUrl;
   };
 
   return (

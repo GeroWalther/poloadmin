@@ -237,7 +237,7 @@ export default function Dashboard() {
                             <h4 className='text-sm font-medium text-gray-500'>
                               Additional Images
                             </h4>
-                            <div className='mt-1 grid grid-cols-3 gap-2'>
+                            <div className='mt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2'>
                               {article.images.map((image, index) => (
                                 <img
                                   key={index}

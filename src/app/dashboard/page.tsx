@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import TabNavigation from './components/TabNavigation';
+import MagazineForm from './components/MagazineForm';
+import ArticleForm from './components/ArticleForm';
 
 interface Magazine {
   id: string;
@@ -12,13 +15,23 @@ interface Magazine {
   created_at: string;
 }
 
+interface Article {
+  id: string;
+  title: string;
+  description: string;
+  title_image: string;
+  images: string[];
+  created_at: string;
+}
+
 export default function Dashboard() {
+  const [activeTab, setActiveTab] = useState<'magazines' | 'articles'>(
+    'magazines'
+  );
   const [magazines, setMagazines] = useState<Magazine[]>([]);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [articles, setArticles] = useState<Article[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_, setError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -35,6 +48,7 @@ export default function Dashboard() {
 
     checkSession();
     fetchMagazines();
+    fetchArticles();
   }, [router]);
 
   const fetchMagazines = async () => {
@@ -52,46 +66,18 @@ export default function Dashboard() {
     }
   };
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file || !supabase) return;
+  const fetchArticles = async () => {
+    if (!supabase) return;
 
-    setLoading(true);
-    setError(null);
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    try {
-      const timestamp = new Date().getTime();
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${timestamp}-${Math.random()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('magazines')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage
-        .from('magazines')
-        .getPublicUrl(fileName);
-
-      const { error: dbError } = await supabase.from('magazines').insert({
-        title,
-        description,
-        pdf: publicUrlData.publicUrl,
-      });
-
-      if (dbError) throw dbError;
-
-      setTitle('');
-      setDescription('');
-      setFile(null);
-      fetchMagazines();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      setArticles(data || []);
     }
   };
 
@@ -107,13 +93,20 @@ export default function Dashboard() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, type: 'magazine' | 'article') => {
     if (!supabase) return;
 
     try {
-      const { error } = await supabase.from('magazines').delete().eq('id', id);
+      const { error } = await supabase
+        .from(type === 'magazine' ? 'magazines' : 'articles')
+        .delete()
+        .eq('id', id);
       if (error) throw error;
-      fetchMagazines();
+      if (type === 'magazine') {
+        fetchMagazines();
+      } else {
+        fetchArticles();
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error('Delete error:', err);
@@ -122,105 +115,149 @@ export default function Dashboard() {
   };
 
   return (
-    <div className='max-w-4xl mx-auto p-8'>
-      <div className='flex justify-between items-center mb-8'>
-        <h1 className='text-2xl font-bold'>Magazine Dashboard</h1>
-        <button
-          onClick={handleSignOut}
-          className='px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700'>
-          Sign Out
-        </button>
-      </div>
-
-      <form onSubmit={handleUpload} className='mb-8 space-y-4 text-black'>
-        <div>
-          <label
-            htmlFor='title'
-            className='block text-sm font-medium text-white'>
-            Magazine Title
-          </label>
-          <input
-            id='title'
-            type='text'
-            required
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className='mt-1 block w-full rounded border border-gray-300 px-3 py-2'
-          />
-        </div>
-        <div>
-          <label
-            htmlFor='description'
-            className='block text-sm font-medium text-white'>
-            Description
-          </label>
-          <textarea
-            id='description'
-            required
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            className='mt-1 block w-full rounded border border-gray-300 px-3 py-2'
-          />
-        </div>
-        <div>
-          <label htmlFor='pdf' className='block text-sm font-medium text-white'>
-            PDF File
-          </label>
-          <input
-            id='pdf'
-            type='file'
-            accept='.pdf'
-            required
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className='mt-1 block w-full text-white'
-          />
-        </div>
-        {error && (
-          <div className='bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded'>
-            {error}
-          </div>
-        )}
-        <button
-          type='submit'
-          disabled={loading}
-          className='w-full flex justify-center py-2 px-4 border border-transparent bg-slate-700 rounded-md shadow-sm text-sm font-medium text-white bg-foreground hover:bg-[#383838] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black'>
-          {loading ? 'Uploading...' : 'Upload Magazine'}
-        </button>
-      </form>
-
-      <div className='space-y-4'>
-        <h2 className='text-xl font-semibold'>Uploaded Magazines</h2>
-        {magazines.map((magazine) => (
-          <div
-            key={magazine.id}
-            className='border rounded p-4 flex justify-between items-center'>
-            <div>
-              <h3 className='font-medium'>{magazine.title}</h3>
-              <p className='text-sm text-gray-500'>
-                {new Date(magazine.created_at).toLocaleDateString()}
-              </p>
+    <div className='min-h-screen bg-gray-100'>
+      <nav className='bg-white shadow-sm'>
+        <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
+          <div className='flex justify-between h-16'>
+            <div className='flex'>
+              <div className='flex-shrink-0 flex items-center'>
+                <h1 className='text-2xl font-bold text-gray-900'>
+                  Polo and Lifestyle Admin
+                </h1>
+              </div>
             </div>
-            <div>
-              <p>{magazine.description}</p>
-            </div>
-            <div className='flex items-center space-x-2'>
-              <a
-                href={magazine.pdf}
-                target='_blank'
-                rel='noopener noreferrer'
-                className='px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700'>
-                View PDF
-              </a>
+            <div className='flex items-center'>
               <button
-                onClick={() => handleDelete(magazine.id)}
-                className='px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700'>
-                Delete
+                onClick={handleSignOut}
+                className='ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'>
+                Sign Out
               </button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      </nav>
+
+      <main className='max-w-7xl mx-auto py-6 sm:px-6 lg:px-8'>
+        <div className='px-4 py-6 sm:px-0'>
+          <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+
+          {activeTab === 'magazines' ? (
+            <>
+              <MagazineForm fetchMagazines={fetchMagazines} />
+              <div className='mt-8'>
+                <h2 className='text-xl font-semibold mb-4 text-gray-900'>
+                  Uploaded Magazines
+                </h2>
+                <div className='space-y-4'>
+                  {magazines.map((magazine) => (
+                    <div
+                      key={magazine.id}
+                      className='bg-white shadow overflow-hidden sm:rounded-lg'>
+                      <div className='px-4 py-5 sm:px-6 flex justify-between items-center'>
+                        <div>
+                          <h3 className='text-lg leading-6 font-medium text-gray-900'>
+                            {magazine.title}
+                          </h3>
+                          <p className='mt-1 max-w-2xl text-sm text-gray-500'>
+                            {new Date(magazine.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className='flex space-x-2'>
+                          <a
+                            href={magazine.pdf}
+                            target='_blank'
+                            rel='noopener noreferrer'
+                            className='inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'>
+                            View PDF
+                          </a>
+                          <button
+                            onClick={() =>
+                              handleDelete(magazine.id, 'magazine')
+                            }
+                            className='inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <div className='border-t border-gray-200 px-4 py-5 sm:px-6'>
+                        <p className='text-sm text-gray-500'>
+                          {magazine.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <ArticleForm fetchArticles={fetchArticles} />
+              <div className='mt-8'>
+                <h2 className='text-xl font-semibold mb-4 text-gray-900'>
+                  Uploaded Articles
+                </h2>
+                <div className='space-y-4'>
+                  {articles.map((article) => (
+                    <div
+                      key={article.id}
+                      className='bg-white shadow overflow-hidden sm:rounded-lg'>
+                      <div className='px-4 py-5 sm:px-6 flex justify-between items-center'>
+                        <div>
+                          <h3 className='text-lg leading-6 font-medium text-gray-900'>
+                            {article.title}
+                          </h3>
+                          <p className='mt-1 max-w-2xl text-sm text-gray-500'>
+                            {new Date(article.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className='flex space-x-2'>
+                          <button
+                            onClick={() => handleDelete(article.id, 'article')}
+                            className='inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <div className='border-t border-gray-200 px-4 py-5 sm:px-6'>
+                        <p className='text-sm text-gray-500'>
+                          {article.description}
+                        </p>
+                        <div className='mt-4 grid grid-cols-2 gap-4'>
+                          <div>
+                            <h4 className='text-sm font-medium text-gray-500'>
+                              Title Image
+                            </h4>
+                            <img
+                              src={article.title_image || '/placeholder.svg'}
+                              alt={article.title}
+                              className='mt-1 h-32 w-full object-cover rounded-md'
+                            />
+                          </div>
+                          <div>
+                            <h4 className='text-sm font-medium text-gray-500'>
+                              Additional Images
+                            </h4>
+                            <div className='mt-1 grid grid-cols-3 gap-2'>
+                              {article.images.map((image, index) => (
+                                <img
+                                  key={index}
+                                  src={image || '/placeholder.svg'}
+                                  alt={`Article image ${index + 1}`}
+                                  className='h-16 w-full object-cover rounded-md'
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

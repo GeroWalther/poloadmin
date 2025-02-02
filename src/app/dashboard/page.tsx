@@ -20,7 +20,11 @@ interface Article {
   title: string;
   description: string;
   title_image: string;
-  images: string[];
+  sections?: {
+    subheading?: string;
+    text?: string;
+    images?: string[];
+  }[];
   created_at: string;
 }
 
@@ -75,10 +79,11 @@ export default function Dashboard() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      setError(error.message);
-    } else {
-      setArticles(data || []);
+      console.error('Error fetching articles:', error);
+      return;
     }
+
+    setArticles(data || []);
   };
 
   const handleSignOut = async () => {
@@ -196,63 +201,96 @@ export default function Dashboard() {
                 <h2 className='text-xl font-semibold mb-4 text-gray-900'>
                   Uploaded Articles
                 </h2>
-                <div className='space-y-4'>
-                  {articles.map((article) => (
-                    <div
-                      key={article.id}
-                      className='bg-white shadow overflow-hidden sm:rounded-lg'>
-                      <div className='px-4 py-5 sm:px-6 flex justify-between items-center'>
-                        <div>
-                          <h3 className='text-lg leading-6 font-medium text-gray-900'>
-                            {article.title}
-                          </h3>
-                          <p className='mt-1 max-w-2xl text-sm text-gray-500'>
-                            {new Date(article.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className='flex space-x-2'>
-                          <button
-                            onClick={() => handleDelete(article.id, 'article')}
-                            className='inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'>
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                      <div className='border-t border-gray-200 px-4 py-5 sm:px-6'>
-                        <p className='text-sm text-gray-500'>
-                          {article.description}
-                        </p>
-                        <div className='mt-4 grid grid-cols-2 gap-4'>
+                {articles && articles.length > 0 ? (
+                  <div className='space-y-4'>
+                    {articles.map((article) => (
+                      <div
+                        key={article.id}
+                        className='bg-white shadow overflow-hidden sm:rounded-lg'>
+                        <div className='px-4 py-5 sm:px-6 flex justify-between items-center'>
                           <div>
-                            <h4 className='text-sm font-medium text-gray-500'>
-                              Title Image
-                            </h4>
-                            <img
-                              src={article.title_image || '/placeholder.svg'}
-                              alt={article.title}
-                              className='mt-1 h-32 w-full object-cover rounded-md'
-                            />
+                            <h3 className='text-lg leading-6 font-medium text-gray-900'>
+                              {article.title}
+                            </h3>
+                            <p className='mt-1 max-w-2xl text-sm text-gray-500'>
+                              {new Date(
+                                article.created_at
+                              ).toLocaleDateString()}
+                            </p>
                           </div>
-                          <div>
-                            <h4 className='text-sm font-medium text-gray-500'>
-                              Additional Images
-                            </h4>
-                            <div className='mt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2'>
-                              {article.images.map((image, index) => (
-                                <img
-                                  key={index}
-                                  src={image || '/placeholder.svg'}
-                                  alt={`Article image ${index + 1}`}
-                                  className='h-16 w-full object-cover rounded-md'
-                                />
-                              ))}
+                          <div className='flex space-x-2'>
+                            <button
+                              onClick={() =>
+                                handleDelete(article.id, 'article')
+                              }
+                              className='inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'>
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                        <div className='border-t border-gray-200 px-4 py-5 sm:px-6'>
+                          <p className='text-sm text-gray-500'>
+                            {article.description}
+                          </p>
+                          <div className='mt-4 grid grid-cols-2 gap-4'>
+                            <div>
+                              <h4 className='text-sm font-medium text-gray-500'>
+                                Title Image
+                              </h4>
+                              <img
+                                src={article.title_image || '/placeholder.svg'}
+                                alt={article.title}
+                                className='mt-1 h-32 w-full object-cover rounded-md'
+                              />
+                            </div>
+                            <div>
+                              <h4 className='text-sm font-medium text-gray-500'>
+                                Sections
+                              </h4>
+                              {article.sections?.map(
+                                (section, sectionIndex) => (
+                                  <div key={sectionIndex} className='mt-4'>
+                                    {section.subheading && (
+                                      <h5 className='text-sm font-medium text-gray-700'>
+                                        {section.subheading}
+                                      </h5>
+                                    )}
+                                    {section.text && (
+                                      <p className='text-sm text-gray-500'>
+                                        {section.text}
+                                      </p>
+                                    )}
+                                    {section.images &&
+                                      section.images.length > 0 && (
+                                        <div className='mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2'>
+                                          {section.images.map(
+                                            (image, imageIndex) => (
+                                              <img
+                                                key={`${sectionIndex}-${imageIndex}`}
+                                                src={
+                                                  image || '/placeholder.svg'
+                                                }
+                                                alt={`Section ${
+                                                  sectionIndex + 1
+                                                } image ${imageIndex + 1}`}
+                                                className='h-16 w-full object-cover rounded-md'
+                                              />
+                                            )
+                                          )}
+                                        </div>
+                                      )}
+                                  </div>
+                                )
+                              )}
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No articles found</p>
+                )}
               </div>
             </>
           )}

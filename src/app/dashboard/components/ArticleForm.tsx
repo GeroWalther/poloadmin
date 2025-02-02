@@ -6,40 +6,78 @@ interface ArticleFormProps {
   fetchArticles: () => void;
 }
 
+interface Section {
+  subheading: string;
+  text: string;
+  images: File[];
+  imagePreviews: string[];
+}
+
 const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [titleImage, setTitleImage] = useState<File | null>(null);
-  const [images, setImages] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Add state for image previews
   const [titleImagePreview, setTitleImagePreview] = useState<string | null>(
     null
   );
-  const [imagesPreviews, setImagesPreviews] = useState<string[]>([]);
+
+  // Initialize 5 sections
+  const [sections, setSections] = useState<Section[]>(
+    Array(5)
+      .fill({})
+      .map(() => ({
+        subheading: '',
+        text: '',
+        images: [],
+        imagePreviews: [],
+      }))
+  );
 
   const resetForm = () => {
     setTitle('');
     setDescription('');
     setTitleImage(null);
-    setImages([]);
     setTitleImagePreview(null);
-    setImagesPreviews([]);
+    setSections(
+      Array(5)
+        .fill({})
+        .map(() => ({
+          subheading: '',
+          text: '',
+          images: [],
+          imagePreviews: [],
+        }))
+    );
 
-    // Reset file input values using their IDs
+    // Reset file inputs
     const titleImageInput = document.getElementById(
       'titleImage'
     ) as HTMLInputElement;
-    const imagesInput = document.getElementById('images') as HTMLInputElement;
     if (titleImageInput) titleImageInput.value = '';
-    if (imagesInput) imagesInput.value = '';
+
+    // Reset section image inputs
+    for (let i = 0; i < 5; i++) {
+      const imageInput = document.getElementById(
+        `images${i}`
+      ) as HTMLInputElement;
+      if (imageInput) imageInput.value = '';
+    }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!titleImage || !supabase) return;
+
+    if (!titleImage) {
+      setError('Please select a title image');
+      return;
+    }
+
+    if (!supabase) {
+      setError('Database connection not initialized');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -47,28 +85,34 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
     try {
       // Upload title image
       const titleImageName = await uploadFile(titleImage, 'title-images');
-      console.log('Uploading additional images:', images.length); // Debug log
 
-      // Upload additional images
-      const imageUrls = await Promise.all(
-        images.map(async (img) => {
-          const url = await uploadFile(img, 'article-images');
-          console.log('Uploaded image URL:', url); // Debug log
-          return url;
+      // Upload images for each section and prepare section data
+      const sectionData = await Promise.all(
+        sections.map(async (section) => {
+          const imageUrls = await Promise.all(
+            section.images.map((img) => uploadFile(img, 'article-images'))
+          );
+
+          return {
+            subheading: section.subheading || '', // Ensure we have a string even if empty
+            text: section.text || '', // Ensure we have a string even if empty
+            images: imageUrls || [], // Ensure we have an array even if empty
+          };
         })
       );
-
-      console.log('All image URLs:', imageUrls); // Debug log
 
       // Insert article data into the database
       const { error: dbError } = await supabase.from('articles').insert({
         title,
         description,
         title_image: titleImageName,
-        images: imageUrls,
+        sections: sectionData, // This should now be properly formatted
       });
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('Database error:', dbError);
+        throw dbError;
+      }
 
       resetForm();
       fetchArticles();
@@ -86,29 +130,55 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
     const file = e.target.files?.[0];
     if (file) {
       setTitleImage(file);
-      // Create preview URL
       const previewUrl = URL.createObjectURL(file);
       setTitleImagePreview(previewUrl);
     }
   };
 
-  const handleImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSectionImagesChange = (
+    index: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const files = Array.from(e.target.files || []);
-    console.log('Selected files:', files.length); // Debug log
-    setImages(files);
-    // Create preview URLs
     const previews = files.map((file) => URL.createObjectURL(file));
-    console.log('Preview URLs:', previews.length); // Debug log
-    setImagesPreviews(previews);
+
+    setSections((prevSections) => {
+      const newSections = [...prevSections];
+      newSections[index] = {
+        ...newSections[index],
+        images: files,
+        imagePreviews: previews,
+      };
+      return newSections;
+    });
+  };
+
+  const updateSectionField = (
+    index: number,
+    field: 'subheading' | 'text',
+    value: string
+  ) => {
+    setSections((prevSections) => {
+      const newSections = [...prevSections];
+      newSections[index] = {
+        ...newSections[index],
+        [field]: value,
+      };
+      return newSections;
+    });
   };
 
   // Cleanup preview URLs when component unmounts
   useEffect(() => {
     return () => {
       if (titleImagePreview) URL.revokeObjectURL(titleImagePreview);
-      imagesPreviews.forEach((preview) => URL.revokeObjectURL(preview));
+      sections.forEach((section) => {
+        section.imagePreviews.forEach((preview) =>
+          URL.revokeObjectURL(preview)
+        );
+      });
     };
-  }, [titleImagePreview, imagesPreviews]);
+  }, [titleImagePreview, sections]);
 
   const uploadFile = async (file: File, bucket: string): Promise<string> => {
     if (!supabase) throw new Error('Supabase client not initialized');
@@ -156,7 +226,7 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
         <label
           htmlFor='description'
           className='block text-sm font-medium text-gray-700'>
-          Article Text
+          Description
         </label>
         <textarea
           id='description'
@@ -171,12 +241,13 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
         <label
           htmlFor='titleImage'
           className='block text-sm font-medium text-gray-700'>
-          Title Image (PNG)
+          Title Image (PNG, JPEG, WEBP, SVG, GIF, BMP, TIFF, ICO, HEIC, HEIF,
+          AVIF)
         </label>
         <input
           id='titleImage'
           type='file'
-          accept='.png'
+          accept='.png, .jpeg, .jpg, .webp, .svg, .gif, .bmp, .tiff, .ico, .heic, .heif, .avif'
           required
           onChange={handleTitleImageChange}
           className='mt-1 block w-full text-gray-700'
@@ -191,33 +262,77 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
           </div>
         )}
       </div>
-      <div>
-        <label
-          htmlFor='images'
-          className='block text-sm font-medium text-gray-700'>
-          Additional Images
-        </label>
-        <input
-          id='images'
-          type='file'
-          accept='image/*'
-          multiple
-          onChange={handleImagesChange}
-          className='mt-1 block w-full text-gray-700'
-        />
-        {imagesPreviews.length > 0 && (
-          <div className='mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2'>
-            {imagesPreviews.map((preview, index) => (
-              <img
-                key={index}
-                src={preview}
-                alt={`Preview ${index + 1}`}
-                className='h-32 w-full object-cover rounded'
+      {sections.map((section, index) => (
+        <div key={index} className='mt-8 p-4 border rounded-lg bg-white'>
+          <h3 className='text-lg font-semibold mb-4 text-gray-900'>
+            Section {index + 1}
+          </h3>
+
+          <div className='space-y-4'>
+            <div>
+              <label
+                htmlFor={`subheading${index}`}
+                className='block text-sm font-medium text-gray-700'>
+                Subheading {index + 1}
+              </label>
+              <input
+                id={`subheading${index}`}
+                type='text'
+                value={section.subheading}
+                onChange={(e) =>
+                  updateSectionField(index, 'subheading', e.target.value)
+                }
+                className='mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-gray-900'
               />
-            ))}
+            </div>
+
+            <div>
+              <label
+                htmlFor={`text${index}`}
+                className='block text-sm font-medium text-gray-700'>
+                Text {index + 1}
+              </label>
+              <textarea
+                id={`text${index}`}
+                value={section.text}
+                onChange={(e) =>
+                  updateSectionField(index, 'text', e.target.value)
+                }
+                rows={3}
+                className='mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-gray-900'
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor={`images${index}`}
+                className='block text-sm font-medium text-gray-700'>
+                Images for Section {index + 1}
+              </label>
+              <input
+                id={`images${index}`}
+                type='file'
+                accept='image/*'
+                multiple
+                onChange={(e) => handleSectionImagesChange(index, e)}
+                className='mt-1 block w-full text-gray-700'
+              />
+              {section.imagePreviews.length > 0 && (
+                <div className='mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2'>
+                  {section.imagePreviews.map((preview, imgIndex) => (
+                    <img
+                      key={imgIndex}
+                      src={preview}
+                      alt={`Preview ${imgIndex + 1}`}
+                      className='h-32 w-full object-cover rounded'
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ))}
       {error && (
         <div className='bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded'>
           {error}

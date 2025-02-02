@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import TabNavigation from './components/TabNavigation';
 import MagazineForm from './components/MagazineForm';
 import ArticleForm from './components/ArticleForm';
+import EditArticleModal from './components/EditArticleModal';
 
 interface Magazine {
   id: string;
@@ -37,6 +38,8 @@ export default function Dashboard() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setError] = useState<string | null>(null);
   const router = useRouter();
+  const [editingArticle, setEditingArticle] = useState<Article | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -111,12 +114,23 @@ export default function Dashboard() {
         fetchMagazines();
       } else {
         fetchArticles();
+        setEditingArticle(null); // Clear editing state after deletion
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error('Delete error:', err);
       setError(err.message);
     }
+  };
+
+  const handleEditClick = (article: Article) => {
+    setEditingArticle(article);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingArticle(null);
   };
 
   return (
@@ -144,7 +158,13 @@ export default function Dashboard() {
 
       <main className='max-w-7xl mx-auto py-6 sm:px-6 lg:px-8'>
         <div className='px-4 py-6 sm:px-0'>
-          <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabNavigation
+            activeTab={activeTab}
+            setActiveTab={(tab) => {
+              setActiveTab(tab);
+              setEditingArticle(null); // Clear editing state when switching tabs
+            }}
+          />
 
           {activeTab === 'magazines' ? (
             <>
@@ -196,7 +216,12 @@ export default function Dashboard() {
             </>
           ) : (
             <>
-              <ArticleForm fetchArticles={fetchArticles} />
+              <ArticleForm
+                fetchArticles={fetchArticles}
+                articleToEdit={editingArticle}
+                onCancelEdit={() => setEditingArticle(null)}
+              />
+
               <div className='mt-8'>
                 <h2 className='text-xl font-semibold mb-4 text-gray-900'>
                   Uploaded Articles
@@ -219,6 +244,11 @@ export default function Dashboard() {
                             </p>
                           </div>
                           <div className='flex space-x-2'>
+                            <button
+                              onClick={() => handleEditClick(article)}
+                              className='inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'>
+                              Edit
+                            </button>
                             <button
                               onClick={() =>
                                 handleDelete(article.id, 'article')
@@ -296,6 +326,13 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      <EditArticleModal
+        isOpen={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        article={editingArticle}
+        fetchArticles={fetchArticles}
+      />
     </div>
   );
 }

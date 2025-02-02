@@ -2,8 +2,23 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
+interface Article {
+  id: string;
+  title: string;
+  description: string;
+  title_image?: string;
+  sections?: {
+    subheading?: string;
+    text?: string;
+    images?: string[];
+  }[];
+  created_at: string;
+}
+
 interface ArticleFormProps {
   fetchArticles: () => void;
+  articleToEdit?: Article | null;
+  onCancelEdit?: () => void;
 }
 
 interface Section {
@@ -13,26 +28,39 @@ interface Section {
   imagePreviews: string[];
 }
 
-const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+const ArticleForm: React.FC<ArticleFormProps> = ({
+  fetchArticles,
+  articleToEdit = null,
+  onCancelEdit,
+}) => {
+  const [title, setTitle] = useState(articleToEdit?.title || '');
+  const [description, setDescription] = useState(
+    articleToEdit?.description || ''
+  );
   const [titleImage, setTitleImage] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [titleImagePreview, setTitleImagePreview] = useState<string | null>(
-    null
+    articleToEdit?.title_image || null
   );
 
-  // Initialize 5 sections
+  // Initialize sections with existing data if editing
   const [sections, setSections] = useState<Section[]>(
-    Array(5)
-      .fill({})
-      .map(() => ({
-        subheading: '',
-        text: '',
-        images: [],
-        imagePreviews: [],
-      }))
+    articleToEdit?.sections
+      ? articleToEdit.sections.map((section) => ({
+          subheading: section.subheading || '',
+          text: section.text || '',
+          images: [],
+          imagePreviews: section.images || [],
+        }))
+      : Array(5)
+          .fill({})
+          .map(() => ({
+            subheading: '',
+            text: '',
+            images: [],
+            imagePreviews: [],
+          }))
   );
 
   const resetForm = () => {
@@ -69,7 +97,7 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!titleImage) {
+    if (!titleImage && !articleToEdit?.title_image) {
       setError('Please select a title image');
       return;
     }
@@ -83,40 +111,61 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
     setError(null);
 
     try {
-      // Upload title image
-      const titleImageName = await uploadFile(titleImage, 'title-images');
+      // Upload title image if changed
+      let titleImageUrl = articleToEdit?.title_image;
+      if (titleImage) {
+        titleImageUrl = await uploadFile(titleImage, 'title-images');
+      }
 
-      // Upload images for each section and prepare section data
+      // Upload new section images and prepare section data
       const sectionData = await Promise.all(
         sections.map(async (section) => {
-          const imageUrls = await Promise.all(
+          // Upload any new images
+          const newImageUrls = await Promise.all(
             section.images.map((img) => uploadFile(img, 'article-images'))
           );
 
+          // Combine existing image URLs with new ones
+          const existingImageUrls = section.imagePreviews.filter(
+            (url) => typeof url === 'string' && !url.startsWith('blob:')
+          );
+
           return {
-            subheading: section.subheading || '', // Ensure we have a string even if empty
-            text: section.text || '', // Ensure we have a string even if empty
-            images: imageUrls || [], // Ensure we have an array even if empty
+            subheading: section.subheading,
+            text: section.text,
+            images: [...existingImageUrls, ...newImageUrls],
           };
         })
       );
 
-      // Insert article data into the database
-      const { error: dbError } = await supabase.from('articles').insert({
+      const articleData = {
         title,
         description,
-        title_image: titleImageName,
-        sections: sectionData, // This should now be properly formatted
-      });
+        title_image: titleImageUrl,
+        sections: sectionData,
+      };
 
-      if (dbError) {
-        console.error('Database error:', dbError);
-        throw dbError;
+      if (articleToEdit) {
+        // Update existing article
+        const { error: updateError } = await supabase
+          .from('articles')
+          .update(articleData)
+          .eq('id', articleToEdit.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new article
+        const { error: insertError } = await supabase
+          .from('articles')
+          .insert([articleData]);
+
+        if (insertError) throw insertError;
       }
 
-      resetForm();
       fetchArticles();
-    } catch (err: Error | unknown) {
+      if (onCancelEdit) onCancelEdit();
+      resetForm();
+    } catch (err) {
       console.error('Upload error:', err);
       setError(
         err instanceof Error ? err.message : 'An unknown error occurred'
@@ -168,6 +217,26 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
     });
   };
 
+  const removeImage = (sectionIndex: number, imageIndex: number) => {
+    setSections((prevSections) => {
+      const newSections = [...prevSections];
+      const section = { ...newSections[sectionIndex] };
+
+      // Remove image from previews
+      section.imagePreviews = section.imagePreviews.filter(
+        (_, idx) => idx !== imageIndex
+      );
+
+      // If it's a new image (File), also remove from images array
+      if (imageIndex < section.images.length) {
+        section.images = section.images.filter((_, idx) => idx !== imageIndex);
+      }
+
+      newSections[sectionIndex] = section;
+      return newSections;
+    });
+  };
+
   // Cleanup preview URLs when component unmounts
   useEffect(() => {
     return () => {
@@ -180,33 +249,43 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
     };
   }, [titleImagePreview, sections]);
 
-  const uploadFile = async (file: File, bucket: string): Promise<string> => {
-    if (!supabase) throw new Error('Supabase client not initialized');
+  const uploadFile = async (file: File, bucket: string) => {
+    if (!supabase) throw new Error('No supabase client');
 
-    const timestamp = new Date().getTime();
-    const fileName = `${timestamp}-${Math.random()}.${file.name
-      .split('.')
-      .pop()}`;
-
-    const uploadResult = await supabase.storage
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${fileName}`;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { error: uploadError, data } = await supabase.storage
       .from(bucket)
-      .upload(fileName, file);
+      .upload(filePath, file);
 
-    if (uploadResult.error) throw uploadResult.error;
-
-    const publicUrlResult = supabase.storage
-      .from(bucket)
-      .getPublicUrl(fileName);
-
-    if (!publicUrlResult.data?.publicUrl) {
-      throw new Error('Failed to get public URL');
+    if (uploadError) {
+      throw uploadError;
     }
 
-    return publicUrlResult.data.publicUrl;
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(bucket).getPublicUrl(filePath);
+
+    return publicUrl;
   };
 
   return (
     <form onSubmit={handleUpload} className='mb-8 space-y-4'>
+      <div className='flex justify-between items-center mb-4'>
+        <h2 className='text-xl font-semibold'>
+          {articleToEdit ? 'Edit Article' : 'Create New Article'}
+        </h2>
+        {articleToEdit && (
+          <button
+            type='button'
+            onClick={onCancelEdit}
+            className='px-4 py-2 text-sm text-gray-600 hover:text-gray-800'>
+            Cancel Edit
+          </button>
+        )}
+      </div>
       <div>
         <label
           htmlFor='title'
@@ -248,7 +327,7 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
           id='titleImage'
           type='file'
           accept='.png, .jpeg, .jpg, .webp, .svg, .gif, .bmp, .tiff, .ico, .heic, .heif, .avif'
-          required
+          required={!articleToEdit}
           onChange={handleTitleImageChange}
           className='mt-1 block w-full text-gray-700'
         />
@@ -320,12 +399,29 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
               {section.imagePreviews.length > 0 && (
                 <div className='mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2'>
                   {section.imagePreviews.map((preview, imgIndex) => (
-                    <img
-                      key={imgIndex}
-                      src={preview}
-                      alt={`Preview ${imgIndex + 1}`}
-                      className='h-32 w-full object-cover rounded'
-                    />
+                    <div key={imgIndex} className='relative group'>
+                      <img
+                        src={preview}
+                        alt={`Preview ${imgIndex + 1}`}
+                        className='h-32 w-full object-cover rounded'
+                      />
+                      <button
+                        type='button'
+                        onClick={() => removeImage(index, imgIndex)}
+                        className='absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <svg
+                          xmlns='http://www.w3.org/2000/svg'
+                          className='h-4 w-4'
+                          viewBox='0 0 20 20'
+                          fill='currentColor'>
+                          <path
+                            fillRule='evenodd'
+                            d='M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z'
+                            clipRule='evenodd'
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -342,7 +438,11 @@ const ArticleForm: React.FC<ArticleFormProps> = ({ fetchArticles }) => {
         type='submit'
         disabled={loading}
         className='w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400'>
-        {loading ? 'Uploading...' : 'Upload Article'}
+        {loading
+          ? 'Uploading...'
+          : articleToEdit
+          ? 'Update Article'
+          : 'Upload Article'}
       </button>
     </form>
   );

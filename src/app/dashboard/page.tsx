@@ -286,9 +286,12 @@ export default function Dashboard() {
                                       </h5>
                                     )}
                                     {section.text && (
-                                      <p className='text-sm text-gray-500'>
-                                        {section.text}
-                                      </p>
+                                      <div
+                                        className='text-sm text-gray-500 prose prose-sm'
+                                        dangerouslySetInnerHTML={{
+                                          __html: section.text,
+                                        }}
+                                      />
                                     )}
                                     {section.images &&
                                       section.images.length > 0 && (

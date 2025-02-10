@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import RichTextEditor from '@/components/RichTextEditor';
 
 interface Article {
   id: string;
@@ -120,12 +121,10 @@ const ArticleForm: React.FC<ArticleFormProps> = ({
       // Upload new section images and prepare section data
       const sectionData = await Promise.all(
         sections.map(async (section) => {
-          // Upload any new images
           const newImageUrls = await Promise.all(
             section.images.map((img) => uploadFile(img, 'article-images'))
           );
 
-          // Combine existing image URLs with new ones
           const existingImageUrls = section.imagePreviews.filter(
             (url) => typeof url === 'string' && !url.startsWith('blob:')
           );
@@ -369,16 +368,11 @@ const ArticleForm: React.FC<ArticleFormProps> = ({
               <label
                 htmlFor={`text${index}`}
                 className='block text-sm font-medium text-gray-700'>
-                Text {index + 1}
+                Content
               </label>
-              <textarea
-                id={`text${index}`}
-                value={section.text}
-                onChange={(e) =>
-                  updateSectionField(index, 'text', e.target.value)
-                }
-                rows={3}
-                className='mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-gray-900'
+              <RichTextEditor
+                content={section.text}
+                onChange={(html) => updateSectionField(index, 'text', html)}
               />
             </div>
 

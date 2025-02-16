@@ -31,6 +31,7 @@ const RichTextEditor = ({
         heading: {
           levels: [1, 2, 3],
         },
+        hardBreak: false,
       }),
       Link.configure({
         openOnClick: false,
